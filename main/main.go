@@ -1,9 +1,10 @@
 package main
 
 import (
+	"embed"
+	"io/fs"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -65,10 +66,23 @@ func init() {
 	urls = urlsBuilder.String()
 }
 
+//go:embed html
+var efs embed.FS
+var hfs fs.FS
+
+func init() {
+	var staticFS = fs.FS(efs)
+	var err error
+	hfs, err = fs.Sub(staticFS, html)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func (h *htmlHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch paths := strings.Split(r.URL.Path, "/"); {
 	case strings.HasPrefix(paths[1], worker):
-		content, _ := os.ReadFile(html + "/" + worker)
+		content, _ := efs.ReadFile(html + "/" + worker)
 		content = []byte(strings.ReplaceAll(string(content), urlsPlaceHolder, urls))
 		w.Header().Set("Content-Type", "application/javascript")
 		_, _ = w.Write([]byte("// " + strings.TrimPrefix(paths[1], worker) + "\n"))
@@ -82,6 +96,6 @@ func main() {
 	const addr = "localhost:8082"
 	log.Printf("在浏览器中查看: http://%s", addr)
 	log.Fatal(http.ListenAndServe(addr, &htmlHandler{
-		fileServer: http.FileServer(http.Dir(html)),
+		fileServer: http.FileServer(http.FS(hfs)),
 	}))
 }
